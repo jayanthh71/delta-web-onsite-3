@@ -1,0 +1,16 @@
+{
+  "name": "delta-web-onsite-3",
+  "version": "1.0.0",
+  "description": "Custom git implementation",
+  "license": "ISC",
+  "author": "jayanthh71",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "test": "ts-node init.ts"
+  },
+  "devDependencies": {
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
+  }
+}
