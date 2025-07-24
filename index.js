@@ -23,6 +23,9 @@ class Repository {
       case "commit":
         this.commit(this.args[1] || "New commit");
         break;
+      case "log":
+        this.log();
+        break;
       default:
         console.log("Unknown command");
         exit();
@@ -67,6 +70,11 @@ class Repository {
   }
 
   async add(file) {
+    if (!file) {
+      console.log("Please specify a file to add");
+      exit();
+    }
+
     const data = await fs.readFile(file, { encoding: "utf-8" });
     const dataHash = this.hash(data);
     const dataPath = path.join(this.objectsDir, dataHash);
@@ -124,6 +132,36 @@ class Repository {
       return headContent.trim();
     } catch (error) {
       return null;
+    }
+  }
+
+  async log() {
+    const headCommit = await this.getCurrentHead();
+    if (!headCommit) {
+      console.log("No commits found");
+      return;
+    }
+
+    let currentCommit = headCommit;
+    while (currentCommit) {
+      const commitPath = path.join(this.objectsDir, currentCommit);
+      try {
+        const commitData = JSON.parse(await fs.readFile(commitPath, "utf-8"));
+        console.log(`Commit: ${currentCommit}`);
+        console.log(
+          `Created At: ${new Date(commitData.createdAt).toLocaleString()}`
+        );
+        console.log(`Message: ${commitData.message}`);
+        console.log(`Files:`);
+        commitData.files.forEach((file) => {
+          console.log(`  + ${file.filePath} (${file.fileHash})`);
+        });
+        console.log("-----------------------------");
+        currentCommit = commitData.parent;
+      } catch (error) {
+        console.error(`Error reading commit ${currentCommit}:`, error);
+        break;
+      }
     }
   }
 }
