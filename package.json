@@ -4,7 +4,7 @@
   "description": "Custom git implementation",
   "license": "ISC",
   "author": "jayanthh71",
-  "type": "commonjs",
+  "type": "module",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
