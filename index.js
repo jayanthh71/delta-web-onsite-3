@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import fs from "fs";
+import fs from "fs/promises";
 import path from "path";
 import { exit } from "process";
 
@@ -20,40 +20,45 @@ class Repository {
       case "add":
         this.add(this.args[1]);
         break;
+      case "commit":
+        this.commit(this.args[1] || "New commit");
+        break;
       default:
         console.log("Unknown command");
         exit();
     }
   }
 
-  init() {
+  async init() {
     if (this.args.length > 1) {
       const newDir = path.join(this.cwd, this.args[1]);
 
-      if (!fs.existsSync(newDir)) {
-        fs.mkdirSync(newDir, { recursive: true });
-        this.cwd = newDir;
-      } else {
+      try {
+        await fs.access(newDir);
         console.log("Directory already exists");
         exit();
+      } catch {
+        await fs.mkdir(newDir, { recursive: true });
+        this.cwd = newDir;
       }
     }
 
     console.log(`Initializing in directory: ${this.cwd}`);
 
-    if (!fs.existsSync(path.join(this.cwd, ".delta"))) {
-      fs.mkdirSync(path.join(this.cwd, ".delta"), { recursive: true });
-      this.deltaDir = path.join(this.cwd, ".delta");
-      fs.writeFileSync(path.join(this.deltaDir, "index"));
-      this.indexDir = path.join(this.deltaDir, "index");
-      fs.writeFileSync(path.join(this.deltaDir, "HEAD"));
-      this.headDir = path.join(this.deltaDir, "HEAD");
-      fs.mkdirSync(path.join(this.deltaDir, "objects"), { recursive: true });
-      this.objectsDir = path.join(this.deltaDir, "objects");
-      console.log("Created .delta directory");
-    } else {
+    try {
+      await fs.access(path.join(this.cwd, ".delta"));
       console.log("Repository already initialized");
       exit();
+    } catch {
+      await fs.mkdir(path.join(this.cwd, ".delta"), { recursive: true });
+      this.deltaDir = path.join(this.cwd, ".delta");
+      await fs.writeFile(path.join(this.deltaDir, "index"), JSON.stringify([]));
+      this.indexDir = path.join(this.deltaDir, "index");
+      await fs.writeFile(path.join(this.deltaDir, "HEAD"), "", { flag: "wx" });
+      this.headDir = path.join(this.deltaDir, "HEAD");
+      await fs.mkdir(path.join(this.deltaDir, "objects"), { recursive: true });
+      this.objectsDir = path.join(this.deltaDir, "objects");
+      console.log("Created .delta directory");
     }
   }
 
@@ -61,17 +66,65 @@ class Repository {
     return crypto.createHash("sha1").update(content, "utf-8").digest("hex");
   }
 
-  add(file) {
-    const data = fs.readFileSync(file, { encoding: "utf-8" });
+  async add(file) {
+    const data = await fs.readFile(file, { encoding: "utf-8" });
     const dataHash = this.hash(data);
     const dataPath = path.join(this.objectsDir, dataHash);
-    fs.writeFileSync(dataPath, data);
-
+    await fs.writeFile(dataPath, data);
     console.log(`Tracking new file: ${file}`);
+    await this.updateStage(file, dataHash);
   }
 
-  stage(filePath, fileHash) {
-    const index = JSON.parse(fs.readFileSync());
+  async updateStage(filePath, fileHash) {
+    const index = JSON.parse(
+      await fs.readFile(this.indexDir, { encoding: "utf-8" })
+    );
+    index.push({
+      filePath: filePath,
+      fileHash: fileHash,
+    });
+    await fs.writeFile(this.indexDir, JSON.stringify(index));
+    console.log(`Updated stage for file: ${filePath}`);
+  }
+
+  async commit(message) {
+    const index = JSON.parse(
+      await fs.readFile(this.indexDir, { encoding: "utf-8" })
+    );
+
+    if (index.length === 0) {
+      console.log("No changes to commit");
+      return;
+    }
+
+    const parentCommit = await this.getCurrentHead();
+
+    const commitData = {
+      createdAt: new Date().toISOString(),
+      message,
+      files: index,
+      parent: parentCommit,
+    };
+
+    const commitHash = this.hash(JSON.stringify(commitData));
+    const commitPath = path.join(this.objectsDir, commitHash);
+    await fs.writeFile(commitPath, JSON.stringify(commitData));
+
+    await fs.writeFile(this.headDir, commitHash);
+    await fs.writeFile(this.indexDir, JSON.stringify([]));
+
+    console.log(`Committed changes with hash: ${commitHash}`);
+  }
+
+  async getCurrentHead() {
+    try {
+      const headContent = await fs.readFile(this.headDir, {
+        encoding: "utf-8",
+      });
+      return headContent.trim();
+    } catch (error) {
+      return null;
+    }
   }
 }
 
