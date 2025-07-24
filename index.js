@@ -20,6 +20,9 @@ class Repository {
       case "add":
         this.add(this.args[1]);
         break;
+      case "stage":
+        this.stage(this.args[1]);
+        break;
       case "commit":
         this.commit(this.args[1] || "New commit");
         break;
@@ -80,6 +83,20 @@ class Repository {
     const dataPath = path.join(this.objectsDir, dataHash);
     await fs.writeFile(dataPath, data);
     console.log(`Tracking new file: ${file}`);
+    await this.updateStage(file, dataHash);
+  }
+
+  async stage(file) {
+    if (!file) {
+      console.log("Please specify a file to stage");
+      exit();
+    }
+
+    const data = await fs.readFile(file, { encoding: "utf-8" });
+    const dataHash = this.hash(data);
+    const dataPath = path.join(this.objectsDir, dataHash);
+    await fs.writeFile(dataPath, data);
+    console.log(`Staging file: ${file}`);
     await this.updateStage(file, dataHash);
   }
 
